@@ -21,3 +21,6 @@ Flask-Cors
 autopep8
 python-dotenv
 pycodestyle
+jose
+jwt
+pyjwt[crypto]

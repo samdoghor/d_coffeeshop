@@ -1,7 +1,8 @@
 import json
 from flask import request, _request_ctx_stack
 from functools import wraps
-from jose import jwt
+from jose import *
+import jwt
 from urllib.request import urlopen
 
 import os
@@ -34,7 +35,45 @@ class AuthError(Exception):
     return the token part of the header
 '''
 def get_token_auth_header():
-   raise Exception('Not Implemented')
+    #Check for Authorization
+    co_auth=request.headers.get('Authorization', None)
+
+    if not co_auth:
+        raise AuthError({
+            'code': '401 Unauthorized',
+            'description': 'You are not authorized to make this request.'
+        }, 401) 
+
+    #Split bearer and the token
+    co_bearer_split=co_auth.split(' ')
+
+    if len(co_bearer_split) != 2 or not co_bearer_split:
+        raise AuthError({
+            'code': '401 Unauthorized',
+            'description': 'You are not authorized to make this request.'
+        }, 401)
+    
+    elif len(co_bearer_split) == 1:
+        raise AuthError({
+            'code': '401 Unauthorized',
+            'description': 'Token not found'
+        }, 401)
+
+    elif len(co_bearer_split) > 2:
+        raise AuthError({
+            'code': '401 Unauthorized',
+            'description': 'Invalid Token'
+        }, 401)
+    
+    elif co_bearer_split[0].lower() != 'bearer':
+        raise AuthError({
+            'code': '401 Unauthorized',
+            'description': 'Header didn\'t start with bearer.'
+        }, 401)
+
+    return co_bearer_split[1]
+
+   #raise Exception('Not Implemented')
 
 '''
 @TODO implement check_permissions(permission, payload) method
@@ -48,7 +87,21 @@ def get_token_auth_header():
     return true otherwise
 '''
 def check_permissions(permission, payload):
-    raise Exception('Not Implemented')
+    if 'permissions' not in payload:
+        raise AuthError({
+            'code': '400 Bad Request',
+            'description': 'A bad request was made'
+        }, 400)
+    
+    if permission not in payload['permissions']:
+        raise AuthError({
+            'code': '403 Forbidden',
+            'description': 'Your request is forbidden because you don\'t have the permission to perform this task'
+        }, 403)
+
+    return True
+    
+    #raise Exception('Not Implemented')
 
 '''
 @TODO implement verify_decode_jwt(token) method
@@ -64,7 +117,69 @@ def check_permissions(permission, payload):
     !!NOTE urlopen has a common certificate error described here: https://stackoverflow.com/questions/50236117/scraping-ssl-certificate-verify-failed-error-for-http-en-wikipedia-org
 '''
 def verify_decode_jwt(token):
-    raise Exception('Not Implemented')
+    #https://auth0.com/docs/quickstart/webapp/python/interactive
+    #https://auth0.com/docs/secure/tokens/json-web-tokens/validate-json-web-tokens
+    #https://auth0.com/docs/secure/tokens/json-web-tokens/json-web-token-claims
+    #https://auth0.com/blog/how-to-handle-jwt-in-python/
+
+    jsonurl = urlopen(f'https://{AUTH0_DOMAIN}/.well-known/jwks.json')
+    jwks = json.loads(jsonurl.read())
+    unverified_header = jwt.get_unverified_header(token)
+    rsa_key={}
+
+    if 'kid' not in unverified_header:
+        raise AuthError({
+            'code': '401 Unauthorized',
+            'description': 'Authorization malformed.'
+        }, 401)
+
+    for key in jwks['keys']:
+        if key['kid'] == unverified_header['kid']:
+            rsa_key = {
+                'kty': key['kty'],
+                'kid': key['kid'],
+                'use': key['use'],
+                'n': key['n'],
+                'e': key['e']
+            }
+
+    #Verification for RSA Key        
+    if rsa_key:
+        try:
+            payload = jwt.decode(
+                token,
+                rsa_key,
+                algorithms=ALGORITHMS,
+                audience=API_AUDIENCE,
+                issuer='https://' + AUTH0_DOMAIN + '/'
+            )
+            return payload
+    
+    #Failure during verification of RSA Key  
+        except jwt.ExpiredSignatureError:
+            raise AuthError({
+                'code': '401 Unauthorized',
+                'description': 'Expired Token.'
+            }, 401)
+
+        except jwt.JWTClaimsError:
+            raise AuthError({
+                'code': '401 Unauthorized',
+                'description': 'Incorrect claims. Please, check the audience and issuer.'
+            }, 401)
+
+        except Exception:
+            raise AuthError({
+                'code': '400 Bad Request',
+                'description': 'Unable to parse authentication token.'
+            }, 400)
+
+    raise AuthError({
+                'code': '400 Bad Request',
+                'description': 'Unable to find the appropriate key.'
+            }, 400)
+
+    #raise Exception('Not Implemented')
 
 '''
 @TODO implement @requires_auth(permission) decorator method
