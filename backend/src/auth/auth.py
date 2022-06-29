@@ -1,12 +1,13 @@
 import json
 from flask import request, _request_ctx_stack
 from functools import wraps
-from jose import *
-import jwt
+from jose import jwt, ExpiredSignatureError, JWTError
 from urllib.request import urlopen
 
+#Extra Imports
 import os
 from dotenv import load_dotenv
+from rsa import DecryptionError
 load_dotenv()
 
 AUTH0_DOMAIN = os.getenv('AUTH0_DOMAIN')
@@ -41,7 +42,7 @@ def get_token_auth_header():
     if not co_auth:
         raise AuthError({
             'code': '401 Unauthorized',
-            'description': 'You are not authorized to make this request.'
+            'description': 'You are not authorized, Header missing'
         }, 401) 
 
     #Split bearer and the token
@@ -70,8 +71,10 @@ def get_token_auth_header():
             'code': '401 Unauthorized',
             'description': 'Header didn\'t start with bearer.'
         }, 401)
+    
+    token = co_bearer_split[1]
 
-    return co_bearer_split[1]
+    return token
 
    #raise Exception('Not Implemented')
 
@@ -116,11 +119,13 @@ def check_permissions(permission, payload):
 
     !!NOTE urlopen has a common certificate error described here: https://stackoverflow.com/questions/50236117/scraping-ssl-certificate-verify-failed-error-for-http-en-wikipedia-org
 '''
+
 def verify_decode_jwt(token):
     #https://auth0.com/docs/quickstart/webapp/python/interactive
     #https://auth0.com/docs/secure/tokens/json-web-tokens/validate-json-web-tokens
     #https://auth0.com/docs/secure/tokens/json-web-tokens/json-web-token-claims
     #https://auth0.com/blog/how-to-handle-jwt-in-python/
+    #https://auth0.com/docs/quickstart/backend/python/01-authorization
 
     jsonurl = urlopen(f'https://{AUTH0_DOMAIN}/.well-known/jwks.json')
     jwks = json.loads(jsonurl.read())
@@ -151,18 +156,18 @@ def verify_decode_jwt(token):
                 rsa_key,
                 algorithms=ALGORITHMS,
                 audience=API_AUDIENCE,
-                issuer='https://' + AUTH0_DOMAIN + '/'
+                issuer='https://'+AUTH0_DOMAIN+'/'
             )
             return payload
     
     #Failure during verification of RSA Key  
-        except jwt.ExpiredSignatureError:
+        except ExpiredSignatureError:
             raise AuthError({
                 'code': '401 Unauthorized',
                 'description': 'Expired Token.'
             }, 401)
 
-        except jwt.JWTClaimsError:
+        except JWTError:
             raise AuthError({
                 'code': '401 Unauthorized',
                 'description': 'Incorrect claims. Please, check the audience and issuer.'
@@ -173,13 +178,14 @@ def verify_decode_jwt(token):
                 'code': '400 Bad Request',
                 'description': 'Unable to parse authentication token.'
             }, 400)
-
-    raise AuthError({
-                'code': '400 Bad Request',
-                'description': 'Unable to find the appropriate key.'
-            }, 400)
+        
+    _request_ctx_stack.top.current_user = payload
+    
+    return verify_decode_jwt(token)
 
     #raise Exception('Not Implemented')
+        
+
 
 '''
 @TODO implement @requires_auth(permission) decorator method
@@ -199,6 +205,5 @@ def requires_auth(permission=''):
             payload = verify_decode_jwt(token)
             check_permissions(permission, payload)
             return f(payload, *args, **kwargs)
-
         return wrapper
     return requires_auth_decorator

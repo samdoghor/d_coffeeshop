@@ -12,7 +12,7 @@ MarkupSafe
 mccabe
 pycryptodome
 pylint
-python-jose-cryptodome
+python-jose[cryptodome]
 six
 typed-ast
 Werkzeug
@@ -21,6 +21,5 @@ Flask-Cors
 autopep8
 python-dotenv
 pycodestyle
-jose
-jwt
 pyjwt[crypto]
+requests

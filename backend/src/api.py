@@ -6,9 +6,6 @@ from flask import Flask, request, jsonify, abort
 from sqlalchemy import exc
 import json
 from flask_cors import CORS
-import sys
-
-
 
 app = Flask(__name__)
 setup_db(app)
